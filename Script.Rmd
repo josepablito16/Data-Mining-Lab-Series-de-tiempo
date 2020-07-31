@@ -62,8 +62,85 @@ View(dataSet)
 
 ##ANIO
 
-```{r}
+Año del índice
 
+Variable categórica ordinal
+
+##Mes
+
+Mes del índice
+
+Variable categórica ordinal
+
+##GasSuperior
+
+Volumen de importación gasolina superior
+
+Variable cuantitativa continua
+
+```{r}
+qqnorm(dataSet$GasSuperior, main = "Distribucion normal de $GasSuperior")
+qqline(dataSet$GasSuperior)
 ```
 
+Por la gráfica anterior podemos afirmar que la varaible cuenta con una distribución normal. 
+
+##GasRegular
+
+Volumen de importación gasolina regular
+
+Variable cuantitativa continua
+
+```{r}
+qqnorm(dataSet$GasSuperior, main = "Distribucion normal de $GasRegular")
+qqline(dataSet$GasSuperior)
+```
+
+Por la gráfica anterior podemos afirmar que la varaible cuenta con una distribución normal. 
+
+##Diesel
+
+Volumen de importación diesel
+
+Variable cuantitativa continua
+
+```{r}
+qqnorm(dataSet$GasSuperior, main = "Distribucion normal de $Diesel")
+qqline(dataSet$GasSuperior)
+```
+
+Por la gráfica anterior podemos afirmar que la varaible cuenta con una distribución normal. 
+
+```{r}
+install.packages('dplyr')
+```
+
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+View(dataSet)
+```
+
+
+```{r}
+library(ggplot2)
+# Step 1
+datagraph <- dataSet %>% 
+group_by(Mes) %>% 
+summarise(Volumen_Diesel = n(Diesel))  #Step 4
+
+#ggplot(aes(x = Mes, y = Diesel, fill = Mes)) +
+#    geom_bar(stat = "identity") +
+#    theme_classic() +
+#    labs(
+#        x = "Mes",
+#        y = "Diesel",
+#        title = paste(
+#            "Importación de Diesel por mes"
+#        )
+#    )
+```
 

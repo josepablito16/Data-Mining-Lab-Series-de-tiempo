@@ -1,0 +1,127 @@
+---
+title: "Script"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tabulizer)
+library(dplyr)
+library(stringr)
+```
+
+## Obtener datos desde el PDF
+```{r}
+pages<-extract_tables("C01-Importación-de-combustibles-VOLUMEN-2020-03.pdf") #PDF con datos actualizados
+datosImp <- do.call(rbind, pages)
+nombresVar<-datosImp[1,]
+datosImp<-as.data.frame(datosImp[2:nrow(datosImp),])
+nombresVar[c(1,4,5,6,8,10,11,15,16,21,23,24)]<-c("Anio","GasAviacion","GasSuperior","GasRegular","rTurboJet","DieselLS","DieselULS","AceitesLub","GrasasLub","PetroleoReconst","Orimulsion","MezclasOleosas")
+names(datosImp)<-nombresVar
+```
+
+```{r}
+#Leer
+dataSet = read.csv("datos.csv",stringsAsFactors = FALSE, na.strings = TRUE, strip.white = TRUE,sep = ",", encoding="UTF-8" )
+
+```
+
+```{r}
+#Seleccionar
+dataset = dataSet[c(1,2,5,6, 9,10)]
+dataset = dataset[-c(46, 96, 146, 196),]
+```
+
+```{r}
+#Limpiar
+dataset$Diesel[dataset$Diesel =="-"] <- 0
+dataset$DieselLS[dataset$DieselLS =="-"] <- 0
+dataset2 = dataset
+```
+
+```{r}
+#COnvertir
+options(digits=9)
+dataset2$Anio = as.numeric(dataset2$Anio)
+dataset2$Mes = as.numeric(dataset2$Mes)
+dataset2$GasSuperior = as.numeric(gsub(",", "", dataset2$GasSuperior))
+dataset2$GasRegular = as.numeric(gsub(",", "", dataset2$GasRegular))
+dataset2$Diesel = as.numeric(gsub(",", "", dataset2$Diesel))
+dataset2$DieselLS = as.numeric(gsub(",", "", dataset2$DieselLS))
+#Unir Diesel
+dataset2$Diesel = dataset2$Diesel + dataset2$DieselLS
+dataset2 = dataset2[-6]
+dataSet = dataset2
+View(dataSet)
+```
+
+
+
+## Serie de tiempo Diesel
+
+Primero creamos la serie de tiempo para los datos del Diesel
+```{r}
+View(dataSet)
+diesel <- ts(dataSet[dataSet$Diesel!="Diesel" & dataSet$Diesel!="-","Diesel"], start=c(2001, 1), end=c(2020,3), frequency=12)
+
+class(diesel)
+View(diesel)
+```
+
+## Construcción del modelo ARIMA
+
+# Identificación 
+A continuación se exploran las características de la serie: 
+
+Frecuencia de la serie: 
+```{r}
+frequency(diesel)
+```
+
+Frecuencia de la serie: 
+```{r}
+frequency(diesel)
+```
+
+# Gráfica de la serie de tiempo
+```{r}
+plot(diesel)
+abline(reg=lm(diesel~time(diesel)), col=c("red"))
+```
+
+Podemos observar que es una serie de tiempo continua con ligera tendencia a crecer por lo que es una serie de tiempo no estacionaria. 
+
+# Descomposición de la serie
+```{r}
+plot(decompose(diesel))
+```
+
+Podemos observar una serie con tendencia a aumentar, que no es estacionaria en varianza y también tiene estacionalidad.
+
+
+A continuación se separa la serie de tiempo en entrenamiento y prueba
+
+```{r}
+train <- head(diesel, round(length(diesel) * 0.7))
+h <- length(diesel) - length(train)
+test <- tail(diesel, h)
+```
+
+## Estimar los parámetros del modelo
+A continuación aplicaremos una transformación logaritmica para hacer que la serie sea constante en varianza. 
+
+```{r}
+logTrain <- log(diesel)
+plot(decompose(logTrain))
+```
+
+```{r}
+plot(logTrain)
+```
+
+Podemos notar que se logro hacer un poco más constante la varianza de la serie. A continuación verificaremos que es estacionaria en media. Si tiene raices unitarias podemos decir que no es estacionaria en media. 
+
+```{r}
+adfTest(train)
+```
+

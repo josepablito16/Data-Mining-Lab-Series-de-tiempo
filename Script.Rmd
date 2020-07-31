@@ -20,5 +20,42 @@ nombresVar[c(1,4,5,6,8,10,11,15,16,21,23,24)]<-c("Anio","GasAviacion","GasSuperi
 names(datosImp)<-nombresVar
 ```
 
+```{r}
+#Leer
+dataSet = read.csv("datos.csv",stringsAsFactors = FALSE, na.strings = TRUE, strip.white = TRUE,sep = ",", encoding="UTF-8" )
+
+```
+
+```{r}
+#Seleccionar
+dataset = dataSet[c(1,2,5,6, 9,10)]
+dataset = dataset[-c(46, 96, 146, 196),]
+```
+
+```{r}
+#Limpiar
+dataset$Diesel[dataset$Diesel =="-"] <- 0
+dataset$DieselLS[dataset$DieselLS =="-"] <- 0
+```
+
+```{r}
+#COnvertir
+options(digits=9)
+dataset2$Anio = as.numeric(dataset2$Anio)
+dataset2$Mes = as.numeric(dataset2$Mes)
+dataset2$GasSuperior = as.numeric(gsub(",", "", dataset2$GasSuperior))
+dataset2$GasRegular = as.numeric(gsub(",", "", dataset2$GasRegular))
+dataset2$Diesel = as.numeric(gsub(",", "", dataset2$Diesel))
+dataset2$DieselLS = as.numeric(gsub(",", "", dataset2$DieselLS))
+#Unir Diesel
+dataset2$Diesel = dataset2$Diesel + dataset2$DieselLS
+dataset2 = dataset2[-6]
+dataSet = dataset2
+```
+
+```{r}
+dataSet
+```
+
 View(datosImp)
 

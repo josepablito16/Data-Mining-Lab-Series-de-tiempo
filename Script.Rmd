@@ -36,6 +36,7 @@ dataset = dataset[-c(46, 96, 146, 196),]
 #Limpiar
 dataset$Diesel[dataset$Diesel =="-"] <- 0
 dataset$DieselLS[dataset$DieselLS =="-"] <- 0
+dataset2 = dataset
 ```
 
 ```{r}
@@ -54,8 +55,15 @@ dataSet = dataset2
 ```
 
 ```{r}
-dataSet
+View(dataSet)
 ```
 
-View(datosImp)
+### Clasifición de las variables
+
+##ANIO
+
+```{r}
+
+```
+
 

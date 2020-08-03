@@ -8,6 +8,15 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tabulizer)
 library(dplyr)
 library(stringr)
+library(ggplot2)
+
+
+library(fUnitRoots)
+library(forecast)
+library(lmtest)
+
+#install.packages("prophet")
+library(prophet)
 ```
 
 ## Obtener datos desde el PDF
@@ -108,17 +117,7 @@ Variable cuantitativa continua
 qqnorm(dataSet$GasSuperior, main = "Distribucion normal de $Diesel")
 qqline(dataSet$GasSuperior)
 ```
-
 Por la gráfica anterior podemos afirmar que la varaible cuenta con una distribución normal. 
-
-```{r}
-install.packages('dplyr')
-```
-
-
-```{r}
-library(dplyr)
-```
 
 ```{r}
 View(dataSet)
@@ -126,21 +125,263 @@ View(dataSet)
 
 
 ```{r}
-library(ggplot2)
 # Step 1
-datagraph <- dataSet %>% 
-group_by(Mes) %>% 
-summarise(Volumen_Diesel = n(Diesel))  #Step 4
+#p <- dataSet %>% 
+#group_by(Anio) %>% 
+#summarise(mean = mean(Diesel))  #Step 4
+#p <- as.data.frame(p) 
 
-#ggplot(aes(x = Mes, y = Diesel, fill = Mes)) +
+#ggplot(aes(x = p$Anio, y = p$mean, fill = p$Anio)) +
 #    geom_bar(stat = "identity") +
 #    theme_classic() +
 #    labs(
-#        x = "Mes",
-#        y = "Diesel",
+#        x = "Media",
+#        y = "Mes",
 #        title = paste(
-#            "Importación de Diesel por mes"
+#            "importaci[on media por mes"
 #        )
 #    )
 ```
 
+## Serie de tiempo Gasolina Regular
+
+Primero creamos la serie de tiempo para los datos del Diesel
+```{r}
+#View(dataSet)
+
+regular <- ts(dataSet$GasRegular, start=c(2001, 1), end=c(2020,3), frequency=12)
+
+start(regular)
+end(regular)
+
+```
+
+## Construcción del modelo ARIMA
+
+# Identificación 
+A continuación se exploran las características de la serie: 
+
+Frecuencia de la serie: 
+```{r}
+frequency(regular)
+```
+
+# Gráfica de la serie de tiempo
+```{r}
+plot(regular)
+abline(reg=lm(regular~time(regular)), col=c("red"))
+```
+
+Podemos observar que es una serie de tiempo continua con tendencia a crecer por lo que es una serie de tiempo no estacionaria. 
+
+# Descomposición de la serie
+```{r}
+plot(decompose(regular))
+```
+
+Podemos observar una serie con tendencia a aumentar, que no es estacionaria en varianza y también tiene estacionalidad.
+
+
+A continuación se separa la serie de tiempo en entrenamiento y prueba
+
+```{r}
+train <- head(regular, round(length(regular) * 0.7))
+h <- length(regular) - length(train)
+test <- tail(regular, h)
+```
+
+## Estimar los parámetros del modelo
+A continuación aplicaremos una transformación logaritmica para hacer que la serie sea constante en varianza. 
+
+```{r}
+logTrain <- log(regular)
+plot(decompose(logTrain))
+```
+
+```{r}
+plot(logTrain)
+abline(reg=lm(logTrain~time(logTrain)), col=c("red"))
+```
+
+Podemos notar que se logro hacer un poco más constante la varianza de la serie. A continuación verificaremos que es estacionaria en media. Si tiene raices unitarias podemos decir que no es estacionaria en media. 
+
+```{r}
+adfTest(train)
+```
+
+```{r}
+unitrootTest(train)
+```
+
+Como podemos notar, en ambas pruebas el valor de p es mayor a 0.05 por lo que no se puede rechazar la hipótesis nula de ausencia de raíces unitarias. Entonces por ende no es estacionaria en media.  
+
+A coninuación hacemos lo mismo pero con una diferenciación:
+
+```{r}
+adfTest(diff(train))
+```
+
+```{r}
+unitrootTest(diff(train))
+```
+
+Como podemos observar en esta ocasión el valor de p está por debajo de 0.05 por lo que ahora si se puede descartar la hipótesis nula de que existen raíces unitarias. Podemos notar entonces que solo es necesaria una diferenciación (d=1). 
+
+El siguiente paso es intentar identificar los parámetros p y q usando los gráficos de autocorrelación y autocorrelación parcial.
+
+```{r}
+acf(logTrain,100) 
+```
+
+En el gráfico de la función podemos notar que se anula después del quinto retardo por lo que se puede sugerir q=5.
+
+```{r}
+pacf(logTrain,20) 
+```
+
+En el gráfico de la función podemos notar que se anula después del retardo 0 por lo que podríamos sugerir un coeficiente p=0.
+
+Podemos sugerir un modelo con los siguientes parámetros: 
+
+* p=0.
+* q=5.
+* d=1.
+
+O en otras palabras ARIMA(p,d,q).
+
+Volvamos a ver la descomposición de la serie paran determinar si hay estacionalidad 
+
+```{r}
+decTrain <- decompose(logTrain)
+plot(decTrain$seasonal)
+```
+
+Podemos notar que si existe estacionalidad en la serie. A continuación, se buscarán los parámetros estacionales usando las funciones de autocorrelación y autocorrelación parcial. 
+
+```{r}
+Acf(diff(logTrain),84)
+```
+
+Podemos notar que en casi todos los períodos hay dos decaimientos estacionales por lo que podemos sugerir P=2.
+
+```{r}
+Pacf(diff(logTrain),60)
+```
+
+Podemos darnos cuenta que los pico significativos están al inicio de la gráfica por lo que podemos sugerir D=1. Finalmente Q=0.
+
+Con los parámetros determinados generamos un modelo: 
+
+```{r}
+fitArima <- arima(logTrain,order=c(0,1,5),seasonal = c(2,1,0))
+```
+
+R tiene la capacidad de generar un modelo automáticamente, entonces también lo tomaremos en cuenta: 
+
+```{r}
+fitAutoArima <- auto.arima(train)
+```
+
+
+## Significación de los coeficientes: 
+
+A continuación, analizaremos que tan significativos son los coeficientes de cada modelo
+
+```{r}
+coeftest(fitArima)
+```
+
+En este caso podemos notar no todos los coeficientes son significativos.
+
+```{r}
+coeftest(fitAutoArima)
+```
+
+Podemos notar que todos los coeficientes son significativo ya que todos son menores a 0.05.
+
+## Análisis de Residuales
+
+A continuación, se analizarán los residuales de ambos modelos. Estos deben estar distribuidos normalmente y se deben de parecer al ruido blanco.
+
+```{r}
+qqnorm(fitArima$residuals)
+qqline(fitArima$residuals)
+```
+
+```{r}
+checkresiduals(fitArima)
+```
+
+Podemos notar que los datos tienen una distribución normal. El test de Ljung-Box muestra que  los datos se distribuyen de forma independiente puesto que el p-value es mayor a 0.05 y por lo que no se puede rechazar la hipótesis nula. Esto quiere decir que el modelo es aceptable para predecir.
+
+Analicemos también el modelo generado automáticamente por R: 
+
+```{r}
+qqnorm(fitAutoArima$residuals)
+qqline(fitAutoArima$residuals)
+```
+```{r}
+checkresiduals(fitAutoArima)
+```
+Podemos notar que los datos tienen una distribución normal. Sin embargo, según el test de Ljung-Box los datos se distribuyen de forma dependiente puesto que el p-value es menor a 0.05 y se puede rechazar la hipótesis nula. Esto quiere decir que el modelo no es aceptable para predecir.
+
+## Predicción con el modelo generado
+
+Pasaremos a predecir con la función forecast la misma cantidad de meses que hay en test y compararemos con los valores reales. 
+
+```{r}
+fitArima <- arima(log(train),c(0,1,3),seasonal =list( order=c(2,1,0),period=12))
+test2<-ts(test,start = c(2014,7),end = c(2020,3),frequency = 12)
+fitArima %>%
+  forecast(h) %>%
+  autoplot() + autolayer(log(test2))
+```
+
+Podemos notar que nuestro modelo es bueno prediciendo, ya que las predicciones están dentro del intervalo de confianza.
+
+```{r}
+fitAutoArima <- auto.arima(train)
+test3<-ts(test,start = c(2014,7),end = c(2020,3),frequency = 12)
+fitAutoArima %>%
+  forecast(h) %>%
+  autoplot() + autolayer(test3)
+```
+
+Podemos notar que el modelo realizado automáticamente por R no predice muy bien, ya que no se parece en nada a los datos reales. Entonces podemos decir que nosotros hemos construido un mejor modelo al que genera automáticamente R. 
+
+## Construcción del modelo Prophet
+
+Preparamos los datos como los necesita este algoritmo: 
+```{r}
+df<-data.frame(ds=as.Date(as.yearmon(time(train))),y=as.matrix(train) )
+testdf<-data.frame(ds=as.Date(as.yearmon(time(test))),y=as.matrix(test) )
+```
+
+A continuación, elaboramos el modelo: 
+
+```{r}
+fitProphet<-prophet(df,yearly.seasonality = T,weekly.seasonality = T)
+
+```
+
+Usaremos el modelo para predecir la misma cantidad de meses que el modelo ARIMA: 
+
+```{r}
+future <- make_future_dataframe(fitProphet,periods = h,freq = "month", include_history = T)
+p <- predict(fitProphet,future)
+p<-p[,c("ds","yhat","yhat_lower","yhat_upper")]
+plot(fitProphet,p)
+```
+
+
+```{r}
+pred<-tail(p,h)
+pred$y<-testdf$y
+
+ggplot(pred, aes(x=ds, y=yhat)) +
+   geom_line(size=1, alpha=0.8) +
+   geom_ribbon(aes(ymin=yhat_lower, ymax=yhat_upper), fill="blue", alpha=0.2) +
+   geom_line(data=pred, aes(x=ds, y=y),color="red")
+```
+
+Podemos notar que el modelo Prophet no es muy bueno, por que no se encuentra en los intervalos de confianza. En comparación con el modelo que realizamos ARIMA , nuestro predicción se parece más a los datos reales por lo que podemos decir que el modelo ARIMA es mejor.

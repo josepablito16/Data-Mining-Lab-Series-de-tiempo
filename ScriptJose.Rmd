@@ -11,6 +11,8 @@ library(stringr)
 library(fUnitRoots)
 library(forecast)
 library(lmtest)
+library(prophet)
+library(ggplot2)
 ```
 
 ## Obtener datos desde el PDF
@@ -269,3 +271,42 @@ fitAutoArima %>%
 ```
 
 Podemos notar que el modelo realizado automáticamente por R no predice muy bien, ya que no se parece en nada a los datos reales. Entonces podemos decir que nosotros hemos construido un mejor modelo al que genera automáticamente R. 
+
+
+
+## Construcción del modelo Prophet
+
+Preparamos los datos como los necesita este algoritmo: 
+```{r}
+df<-data.frame(ds=as.Date(as.yearmon(time(train))),y=as.matrix(train) )
+testdf<-data.frame(ds=as.Date(as.yearmon(time(test))),y=as.matrix(test) )
+```
+
+A continuación, elaboramos el modelo: 
+
+```{r}
+fitProphet<-prophet(df,yearly.seasonality = T,weekly.seasonality = T)
+
+```
+
+Usaremos el modelo para predecir la misma cantidad de meses que el modelo ARIMA: 
+
+```{r}
+future <- make_future_dataframe(fitProphet,periods = h,freq = "month", include_history = T)
+p <- predict(fitProphet,future)
+p<-p[,c("ds","yhat","yhat_lower","yhat_upper")]
+plot(fitProphet,p)
+```
+
+
+```{r}
+pred<-tail(p,h)
+pred$y<-testdf$y
+
+ggplot(pred, aes(x=ds, y=yhat)) +
+   geom_line(size=1, alpha=0.8) +
+   geom_ribbon(aes(ymin=yhat_lower, ymax=yhat_upper), fill="blue", alpha=0.2) +
+   geom_line(data=pred, aes(x=ds, y=y),color="red")
+```
+
+Podemos notar que el modelo Prophet es considerablemente bueno aunque se sale un poco de los intervalos de confianza, sin embargo si hacemos una comparación con el modelo que realizamos ARIMA , nuestro predicción se parece más a los datos reales por lo que podemos decir que el modelo ARIMA es mejor.

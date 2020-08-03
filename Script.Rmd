@@ -63,10 +63,6 @@ dataset2 = dataset2[-6]
 dataSet = dataset2
 ```
 
-```{r}
-View(dataSet)
-```
-
 ### Clasifición de las variables
 
 ##ANIO
@@ -119,29 +115,64 @@ qqline(dataSet$GasSuperior)
 ```
 Por la gráfica anterior podemos afirmar que la varaible cuenta con una distribución normal. 
 
+## Preguntas
+
+### En que año fue mayor la importación de diesel promedio?
 ```{r}
-View(dataSet)
+p <- dataSet %>% 
+group_by(Anio) %>% 
+summarise(mean = mean(Diesel)) 
+p[order(p$mean),]
 ```
 
+Como podemos observar existe una tendencia de crecimiento en la importacion de diesel. Es interesante ver el decremento que existió en el año 2018 y 2017, gracias a que rompe esta tendencia. De igual manera 2009, es un pico en la importacion que se comporta de manera atípica. 
 
+
+### En que año fue mayor la importación de gasolina regular  promedio?
 ```{r}
-# Step 1
-#p <- dataSet %>% 
-#group_by(Anio) %>% 
-#summarise(mean = mean(Diesel))  #Step 4
-#p <- as.data.frame(p) 
-
-#ggplot(aes(x = p$Anio, y = p$mean, fill = p$Anio)) +
-#    geom_bar(stat = "identity") +
-#    theme_classic() +
-#    labs(
-#        x = "Media",
-#        y = "Mes",
-#        title = paste(
-#            "importaci[on media por mes"
-#        )
-#    )
+p <- dataSet %>% 
+group_by(Anio) %>% 
+summarise(mean = mean(GasRegular)) 
+p[order(p$mean),]
 ```
+Como podemos observar existe una tendencia de crecimiento en la importacion de gasolina. Es interesante ver que el 2009, es un pico en la importacion que se comporta de manera atípica. 
+
+### En que año fue mayor la importación de gasolina superior promedio?
+```{r}
+p <- dataSet %>% 
+group_by(Anio) %>% 
+summarise(mean = mean(GasSuperior)) 
+p[order(p$mean),]
+```
+Como podemos observar existe una tendencia de crecimiento en la importacion de gasolina. Es interesante ver el decremento que existio en el ano 2018, gracias a que rompe esta tendencia. De igual manera 2007, es un pico en la importacion que se comporta de manera atípica. 
+
+### En que mes es mayor la importación de diesel promedio?
+```{r}
+p <- dataSet %>% 
+group_by(Mes) %>% 
+summarise(mean = mean(Diesel)) 
+p[order(p$mean),]
+```
+Como podemos observar marzo es el mes en donde es mayor el consumo de diesel, seguido por diciembre.  Y septiembre es el mes en donde menos se consume.
+
+### En que mes es mayor la importación de gasolina regular promedio?
+```{r}
+p <- dataSet %>% 
+group_by(Mes) %>% 
+summarise(mean = mean(GasRegular)) 
+p[order(p$mean),]
+```
+
+Como podemos observar marzo es el mes en donde es mayor el consumo de gasolina, seguido por enero. Y septiembre es el mes en donde menos se consume. Es interesante ver como diciembre se encuentra en la mitad de la tabla, en específico para la gasolina regular. 
+
+### En que mes es mayor la importación de gasolina superior promedio?
+```{r}
+p <- dataSet %>% 
+group_by(Mes) %>% 
+summarise(mean = mean(GasSuperior)) 
+p[order(p$mean),]
+```
+Como podemos observar marzo es el mes en donde es mayor el consumo de gasolina, seguido por diciembre. Y septiembre es el mes en donde menos se consume. Es interesante ver los picos en al principio y fin de año, gracias a que en los cuartos de mitad de año se encuentra los puntos más bajos. 
 
 ## Serie de tiempo Gasolina Regular
 

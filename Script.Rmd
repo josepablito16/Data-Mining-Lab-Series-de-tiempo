@@ -1,8 +1,16 @@
 ---
-title: "Script"
-output: html_document
+title: "Laboratorio No.2"
+author:
+- Paul Belches
+- José Pablo Cifuentes
+- Oscar Juárez
+date: "3 de agosto, 2020"
+output: pdf_document
+organization: Universidad del Valle de Guatemala
 ---
+\centering
 
+\raggedright
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tabulizer)
@@ -458,10 +466,13 @@ logTrain <- log(superior)
 Intento de estacionalizar la serie con una transformación logarítmica.
 ```{r}
 plot(decompose(logTrain))
+```
 
+```{r}
 plot(logTrain)
 abline(reg=lm(logTrain~time(logTrain)), col=c("red"))
 ```
+
 
 Al parecer se logra mejorar que la varianza sea un poco más constante. Debemos verificar si es estacionaria en media. Si tiene raices unitarias podemos decir que no es estacionaria en media y hay que aplicar procesos de diferenciación. Uno de los factores que nos llevan a pensar que en efecto la varianza es un poco más constante es que la gráfica posee menos oscilación.
 
@@ -504,15 +515,15 @@ Con respecto al presente gráfico, podemos ver que se anula el valor j se anula 
 ```{r}
 pacf(logTrain,80)
 ```
-Se anula luego del segundo retardo, por ello:
+Se anula antes del primer retardo, por ello:
 
-- Se propone un valor p = 2
+- Se propone un valor p = 0
 
 ### Resumen de parámetros:
 - d = 1
-- p = 2
+- p = 0
 - q = 3
-- ARIMA(2,1,3)
+- ARIMA(0,1,3)
 
 ### ¿Estacionalidad en la serie?
 ```{r}
@@ -546,7 +557,7 @@ Los picos significativos están durante el primer período. Por ello:
 
 Modelo con parámetros obtenidos y modelo automático, respectivamente:
 ```{r}
-fitArima <- arima(logTrain,order=c(2,1,3),seasonal = c(2,1,0))
+fitArima <- arima(log(train),c(0,1,3),seasonal =list( order=c(2,1,0),period=12))
 fitAutoArima <- auto.arima(train)
 ```
 
@@ -555,7 +566,7 @@ Validamos si los coeficientes son significativos:
 coeftest(fitArima)
 ```
 
-Todos son menores a 0.05, por lo que sí son significativos
+No todos son menores a 0.05, por lo que no son significativos
 
 ###  Análisis de residuales
 
@@ -609,6 +620,42 @@ El modelo generado por automáticamente no logró predecir adecuadamente. Muchas
 
 - Se logró obtener un modelo generado que predijera de forma considerablemente certera los datos reales.
 - El modelo generado automáticamente por R no obtuvo resultados tan eficientes como en análisis de los comportamientos y la obtención de parámetros manuales.
+
+
+### Construcción del modelo Prophet
+
+Preparamos los datos como los necesita este algoritmo: 
+```{r}
+df<-data.frame(ds=as.Date(as.yearmon(time(train))),y=as.matrix(train) )
+testdf<-data.frame(ds=as.Date(as.yearmon(time(test))),y=as.matrix(test) )
+```
+
+A continuación, elaboramos el modelo: 
+```{r}
+fitProphet<-prophet(df,yearly.seasonality = T,weekly.seasonality = T)
+```
+
+Usaremos el modelo para predecir la misma cantidad de meses que el modelo ARIMA: 
+
+```{r}
+future <- make_future_dataframe(fitProphet,periods = h,freq = "month", include_history = T)
+p <- predict(fitProphet,future)
+p<-p[,c("ds","yhat","yhat_lower","yhat_upper")]
+plot(fitProphet,p)
+```
+
+
+```{r}
+pred<-tail(p,h)
+pred$y<-testdf$y
+
+ggplot(pred, aes(x=ds, y=yhat)) +
+   geom_line(size=1, alpha=0.8) +
+   geom_ribbon(aes(ymin=yhat_lower, ymax=yhat_upper), fill="blue", alpha=0.2) +
+   geom_line(data=pred, aes(x=ds, y=y),color="red")
+```
+
+El modelo prophet no es tan eficiente como el modelo ARIMA construido por nosotros. Se sale de los intervalos de confianza en varias ocasiones y no alcanza a superar el modelo ARIMA previo.
 
 ## Modelo de Diesel
 

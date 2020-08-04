@@ -9,13 +9,9 @@ library(tabulizer)
 library(dplyr)
 library(stringr)
 library(ggplot2)
-
-
 library(fUnitRoots)
 library(forecast)
 library(lmtest)
-
-#install.packages("prophet")
 library(prophet)
 ```
 
@@ -29,12 +25,15 @@ nombresVar[c(1,4,5,6,8,10,11,15,16,21,23,24)]<-c("Anio","GasAviacion","GasSuperi
 names(datosImp)<-nombresVar
 ```
 
+## Leemos los datos de un CSV
 ```{r}
 #Leer
 dataSet = read.csv("datos.csv",stringsAsFactors = FALSE, na.strings = TRUE, strip.white = TRUE,sep = ",", encoding="UTF-8" )
 
 ```
 
+
+## Limpiamos la data
 ```{r}
 #Seleccionar
 dataset = dataSet[c(1,2,5,6, 9,10)]
@@ -48,6 +47,7 @@ dataset$DieselLS[dataset$DieselLS =="-"] <- 0
 dataset2 = dataset
 ```
 
+## Implicamos el dataset limpio
 ```{r}
 #COnvertir
 options(digits=9)
@@ -187,9 +187,9 @@ end(regular)
 
 ```
 
-## Construcción del modelo ARIMA
+## Construcción del modelo ARIMA GAS REGULAR
 
-# Identificación 
+### Identificación
 A continuación se exploran las características de la serie: 
 
 Frecuencia de la serie: 
@@ -197,7 +197,7 @@ Frecuencia de la serie:
 frequency(regular)
 ```
 
-# Gráfica de la serie de tiempo
+Gráfica de la serie de tiempo
 ```{r}
 plot(regular)
 abline(reg=lm(regular~time(regular)), col=c("red"))
@@ -205,7 +205,7 @@ abline(reg=lm(regular~time(regular)), col=c("red"))
 
 Podemos observar que es una serie de tiempo continua con tendencia a crecer por lo que es una serie de tiempo no estacionaria. 
 
-# Descomposición de la serie
+Descomposición de la serie
 ```{r}
 plot(decompose(regular))
 ```
@@ -416,3 +416,196 @@ ggplot(pred, aes(x=ds, y=yhat)) +
 ```
 
 Podemos notar que el modelo Prophet no es muy bueno, por que no se encuentra en los intervalos de confianza. En comparación con el modelo que realizamos ARIMA , nuestro predicción se parece más a los datos reales por lo que podemos decir que el modelo ARIMA es mejor.
+
+## Construcción del modelo ARIMA GAS REGULAR
+
+Creamos la serie de tiempo
+```{r}
+superior <- ts(dataSet$GasSuperior, start=c(2001, 1), end=c(2020, 3), frequency=12)
+```
+
+Establecemos datos a usar
+```{r}
+train <- head(superior, round(length(superior) * 0.7))
+h <- length(superior) - length(train)
+test <- tail(superior, h)
+```
+
+### Iniciamos la construcción del modelo
+
+Primero, analizaremos el gráfico de la serie
+```{r}
+plot(superior)
+abline(reg=lm(superior~time(superior)), col=c("red"))
+```
+
+Es una serie con frecuencia anual desde enero 2001 hasta marzo 2020. La línea de la media nos indica que la serie tiene una tendencia a crecer. Cabe destacar que, durante los años 2011 y 2015 el precio se mantuvo estable, es hasta después del 2015 que el precio creció de nuevo.
+
+### Descomposición de la serie
+```{r}
+dec.superior<-decompose(superior)
+plot(dec.superior)
+```
+
+La tendencia no es estacionaria en varianza, pues los rangos varían bastante con el tiempo. La serie tiene estacionalidad.
+
+### Estimar parámetros del modelo
+Dado que no es estacionaria en varianza le aplicaremos una transformación logaritmica para hacerla constante en varianza. Lo haremos con la serie de entrenamiento que es la que nos ayudará a predecir
+```{r}
+logTrain <- log(superior)
+```
+
+Intento de estacionalizar la serie con una transformación logarítmica.
+```{r}
+plot(decompose(logTrain))
+
+plot(logTrain)
+abline(reg=lm(logTrain~time(logTrain)), col=c("red"))
+```
+
+Al parecer se logra mejorar que la varianza sea un poco más constante. Debemos verificar si es estacionaria en media. Si tiene raices unitarias podemos decir que no es estacionaria en media y hay que aplicar procesos de diferenciación. Uno de los factores que nos llevan a pensar que en efecto la varianza es un poco más constante es que la gráfica posee menos oscilación.
+
+
+### Usando la prueba de Dickey-Fuller
+```{r}
+adfTest(train)
+```
+El valor p es mayor a 0.05, por lo que no se puede rechazar la hipótesis nula de las raices unitarias.
+
+### Segunda prueba
+```{r}
+unitrootTest(train)
+```
+El valor p tampoco es mayor a 0.05. Esto significa que la serie no es estacionaria en media.
+
+
+### Aplicando diferenciación
+Se aplicará una diferenciación con el fin de hacer la serie estacionario en media.
+```{r}
+adfTest(diff(train))
+unitrootTest(diff(train))
+```
+En ambas pruebas el valor p es menor a 0.05. Con una sola diferenciación se puede rechazar la hipótesis nula de las raíces unitarias. Por lo tanto:
+
+- d = 1
+
+### Identificando parámetros p y q
+Función de autocorrelación:
+```{r}
+acf(logTrain,80)
+```
+
+Con respecto al presente gráfico, podemos ver que se anula el valor j se anula luego del tercer retardo.
+
+- Se propone un valor q = 3
+
+
+### Función de correlación parcial
+```{r}
+pacf(logTrain,80)
+```
+Se anula luego del segundo retardo, por ello:
+
+- Se propone un valor p = 2
+
+### Resumen de parámetros:
+- d = 1
+- p = 2
+- q = 3
+- ARIMA(2,1,3)
+
+### ¿Estacionalidad en la serie?
+```{r}
+decTrain <- decompose(superior)
+plot(decTrain$seasonal)
+```
+
+A simple vista, parece que la serie sí tiene estacionalidad. 
+
+
+### Uso de la función de autocorrelación
+Se usará la serie estacionarizada.
+```{r}
+Acf(diff(logTrain),84)
+```
+
+Los períodos poseen 2 decaimientos estacionales. Por ello:
+
+- P = 2
+
+```{r}
+Pacf(diff(logTrain),84)
+```
+
+Los picos significativos están durante el primer período. Por ello:
+
+- Q = 1
+- D = 0
+
+### Generación del modelo
+
+Modelo con parámetros obtenidos y modelo automático, respectivamente:
+```{r}
+fitArima <- arima(logTrain,order=c(2,1,3),seasonal = c(2,1,0))
+fitAutoArima <- auto.arima(train)
+```
+
+Validamos si los coeficientes son significativos:
+```{r}
+coeftest(fitArima)
+```
+
+Todos son menores a 0.05, por lo que sí son significativos
+
+###  Análisis de residuales
+
+```{r}
+qqnorm(fitArima$residuals)
+qqline(fitArima$residuals)
+```
+
+```{r}
+checkresiduals(fitArima)
+```
+
+Los residuales parecen seguir una distribución normal. Los datos se distribuyen de forma dependiente puesto que el valor p es menor a 0.05. En efecto, se puede rechazar la hipótesis nula, es decir, el modelo **no** es aceptable para predecir.
+
+
+###  Análisis de residuales del modelo automático
+```{r}
+qqnorm(fitAutoArima$residuals)
+qqline(fitAutoArima$residuals)
+```
+```{r}
+checkresiduals(fitAutoArima)
+```
+
+El test Ljung-Box dice que los datos se distribuyen de forma independiente puesto que el valor-p es mayor a 0.05. Puede rechazarse la hipótesis nula, el modelo es aceptable para predecir.
+
+
+### Predicción con modelo generado
+```{r}
+fitArima %>%
+  forecast(h) %>%
+  autoplot() + autolayer(log(test))
+```
+
+#### Interpretación:
+El modelo no llega a tener una predicción totalmente acertada, sin embargo, una gran parte del valor predecido entra en el área segura de predicción. Esto quiere decir que el modelo que hemos generado sí tiene la capacidad de predecir adecuadamente el comportamiento del gas superior, aunque no de una forma totalmente viable. Parte de esto puede deberse a que el modelo estuvo expuesto a un crecimiento constante por parte de los precios de la gasolina, sin embargo, a partir del 2015 los precios se mantuvieron casi al mismo nivel que los 8 años anteriores y eso causó una predicción no acertada.
+
+### Predicción con el modelo automatico
+```{r}
+testTs<-ts(test,start = c(2014,7),end = c(2020,3),frequency = 12)
+
+fitAutoArima %>%
+  forecast(h) %>%
+  autoplot() + autolayer(testTs)
+```
+
+El modelo generado por automáticamente no logró predecir adecuadamente. Muchas de sus predicciones no entran en el área segura aunque sí parece tener un comportamiento más constante.
+
+
+### Conclusión del modelo GAS SUPERIOR: 
+
+- Se logró obtener un modelo generado que predijera de forma considerablemente certera los datos reales.
+- El modelo generado automáticamente por R no obtuvo resultados tan eficientes como en análisis de los comportamientos y la obtención de parámetros manuales.

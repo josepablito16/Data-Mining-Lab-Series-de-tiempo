@@ -1,11 +1,14 @@
 # Leer datos de un PDF
-# install.packages("UnitrootTests")
+# install.packages("fUnitRoots")
+# install.packages("forecast")
 library(tabulizer)
 library(dplyr)
 library(stringr)
-library(UnitrootTests)
+library(fUnitRoots)
+library(forecast)
+library(lmtest)
 
-pages<-extract_tables("C01-ImportaciÃ³n-de-combustibles-VOLUMEN-2020-03.pdf")#datos2020
+pages<-extract_tables("C01-Importación-de-combustibles-VOLUMEN-2020-03.pdf")#datos2020
 datosImp <- do.call(rbind, pages)
 nombresVar<-datosImp[1,]
 datosImp<-as.data.frame(datosImp[2:nrow(datosImp),])
@@ -30,48 +33,134 @@ dataset2$DieselLS = as.numeric(gsub(",", "", dataset2$DieselLS))
 dataset2$Diesel = dataset2$Diesel + dataset2$DieselLS
 dataset2 = dataset2[-6]
 dataSet = dataset2
-View(dataSet)
 
 
-diesel <- ts(dataSet$Diesel, start=c(2001, 1), end=c(2020, 3), frequency=12)
+## Creación del Modelo de GasSuperior
+
+# Creamos la serie de tiempo
+superior <- ts(dataSet$GasSuperior, start=c(2001, 1), end=c(2020, 3), frequency=12)
+View(superior)
 
 # Establecemos datos a usar
-train <- head(diesel, round(length(diesel) * 0.7))
-h <- length(diesel) - length(train)
-test <- tail(diesel, h)
-start(diesel)
-end(diesel)
 
-## INICIA LA CONSTRUCCION DEL MODELO
-
-# Saber la frecuencia de la serie
-frequency(diesel)
-
-# Ver el grÃ¡fico de la serie
-plot(diesel)
-abline(reg=lm(diesel~time(diesel)), col=c("red"))
-
-# Es una serie con frecuencia anual desde enero 2001 hasta marzo 2020. No se denota un comportamiento especÃ­fico. 
+# Datos de entrenamiento
+train <- head(superior, round(length(superior) * 0.7))
+h <- length(superior) - length(train)
+test <- tail(superior, h)
 
 
-### DescomposiciÃ³n de la serie
-dec.diesel<-decompose(diesel)
-plot(dec.diesel)
+### Iniciamos la construcción del modelo
 
-# Podemos observar una serie con tendencia a aumentar, que no es estacionaria en varianza, y ademÃ¡s tiene estacionalidad.
+# Primero, analizaremos el gráfico de la serie
+plot(superior)
+abline(reg=lm(superior~time(superior)), col=c("red"))
 
-### Esimar ParÃ¡metros del Modelo
-# CÃ³mo no es estacionaria en varianza le haremos una transformaciÃ³n logaritmica para hacerla constante en varianza.Lo haremos con la serie de entrenamiento que es la que nos ayudarÃ¡ a predecir
-logTrain <- log(diesel)
+# Es una serie con frecuencia anual desde enero 2001 hasta marzo 2020. La línea de la media nos indica que la serie tiene una tendencia a crecer.
+# Cabe destacar que, durante los años 2011 y 2015 el precio se mantuvo estable, es hasta después del 2015 que el precio creció de nuevo.
 
-# Intento de estacionalizar la serie con una transformaciÃ³n logarÃ­tmica
+
+### Descomposición de la serie
+dec.superior<-decompose(superior)
+plot(dec.superior)
+
+# La tendencia no es estacionaria en varianza, pues los rangos varían bastante con el tiempo. La serie tiene estacionalidad.
+
+### Estimar parámetros del modelo
+# Dado que no es estacionaria en varianza le aplicaremos una transformación logaritmica para hacerla constante en varianza.
+# Lo haremos con la serie de entrenamiento que es la que nos ayudará a predecir
+logTrain <- log(superior)
+
+# Intento de estacionalizar la serie con una transformación logarítmica
 plot(decompose(logTrain))
 
 plot(logTrain)
 abline(reg=lm(logTrain~time(logTrain)), col=c("red"))
-# Al parecer se logrÃ³ hacer constante la serie en varianza. Debemos verificar si es estacionaria en media. Si tiene raices unitarias podemos decir que no es estacionaria en media y hay que aplicar procesos de diferenciaciÃ³n.
-# Se puede apreciar menos oscilaciÃ³n con respecto a la varianza
+# Al parecer se logra mejorar que la varianza sea un poco más constante Debemos verificar si es estacionaria en media. Si tiene raices unitarias podemos decir que no es estacionaria en media y hay que aplicar procesos de diferenciación.
+# Uno de los factores que nos llevan a pensar que en efecto la varianza es un poco más constante es que la gráfica posee menos oscilación.
 
+# Usando la prueba de Dickey-Fuller
 adfTest(train)
+# El valor p es mayor a 0.05, por lo que no se puede rechazar la hipótesis nula de las raices unitarias.
+
+# Entonces, hacemos la segunda prueba.
+unitrootTest(train)
+# El valor p tampoco es mayor a 0.05. Esto significa que la serie no es estacionaria en media.
+
+### Aplicando diferenciación
+# Se aplicará una diferenciación con el fin de hacer la serie estacionario en media.
+adfTest(diff(train))
+unitrootTest(diff(train))
+# En ambas pruebas el valor p es menor a 0.05. Con una sola diferenciación se puede rechazar la hipótesis nula de las raíces unitarias. 
+
+# - d=1 
+
+### Identificando parámetros p y q
+
+#### Función de autocorrelación:
+acf(logTrain,80)
+# Con respecto al presente gráfico, podemos ver que se anula el valor j se anula luego del tercer retardo.
+# - Se propone un valor q = 3
+
+#### Función de correlación parcial
+pacf(logTrain,80)
+# Se anula luego del segundo retardo, por ello:
+# - Se propone un valor p = 2
+
+#### Resumen de parámetros:
+# - d = 1
+# - p = 2
+# - q = 3
+# ARIMA(2,1,3)
+
+### ¿Estacionalidad en la serie?
+
+# crear
+
+decTrain <- decompose(superior)
+plot(decTrain$seasonal)
+# A simple vista, parece que la serie sí tiene estacionalidad. 
+
+### Uso de la función de autocorrelación
+# Se usará la serie estacionarizada.
+Acf(diff(logTrain),84)
+
+# Al parecer sí existe estacionalidad en la serie. Para tener una idea de los parámetros estacionales veremos las funciones de autocorrelación y autocorrelación parcial con 36 resagos para ver en que momentos son los picos estacionales. Se usará la serie estacionarizada.
+
+
+Pacf(diff(logTrain),80)
+
+fitArima <- arima(logTrain,order=c(2,1,3),seasonal = c(2,1,0))
+fitAutoArima <- auto.arima(train)
+
+
+coeftest(fitArima)
+# Son significativos
+
+coeftest(fitAutoArima)
+# También son significativos los coeficientes.
+
+### Análisis de residuales
+qqnorm(fitArima$residuals)
+qqline(fitArima$residuals)
+
+checkresiduals(fitArima)
+
+
+### Analizando los residuos del modelo generado de forma automática por R
+qqnorm(fitAutoArima$residuals)
+qqline(fitAutoArima$residuals)
+checkresiduals(fitAutoArima)
+
+
+### Predicción con el modelo generado
+fitArima %>%
+  forecast(h) %>%
+  autoplot() + autolayer(log(test))
+
+### Predicción con el modelo automatico
+fitAutoArima %>%
+  forecast(h) %>%
+  autoplot() + autolayer(test)
+
 
 
